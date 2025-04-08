@@ -6,40 +6,38 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
+        // جدول المستخدمين (users) بعد دمج كل الحقول
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
-            $table->timestamps();
+            $table->id(); // رقم تعريفي تلقائي
+            $table->string('name'); // اسم المستخدم
+            $table->string('email')->unique(); // الإيميل (فريد)
+            $table->timestamp('email_verified_at')->nullable(); // وقت التحقق من الإيميل (اختياري)
+            $table->string('password'); // كلمة السر
+            $table->boolean('is_admin')->default(false); // هل أدمن؟ (افتراضيًا لا)
+            $table->rememberToken(); // رمز التذكر لتسجيل الدخول
+            $table->timestamps(); // وقت الإنشاء والتحديث
         });
 
+        // جدول رموز إعادة تعيين كلمة السر
         Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
+            $table->string('email')->primary(); // الإيميل كمفتاح أساسي
+            $table->string('token'); // رمز إعادة التعيين
+            $table->timestamp('created_at')->nullable(); // وقت الإنشاء
         });
 
+       // جدول الجلسات (sessions)
         Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
+            $table->string('id')->primary(); // معرف الجلسة
+            $table->foreignId('user_id')->nullable()->index(); // معرف المستخدم (اختياري)
+            $table->string('ip_address', 45)->nullable(); // عنوان IP
+            $table->text('user_agent')->nullable(); // معلومات المتصفح
+            $table->longText('payload'); // بيانات الجلسة
+            $table->integer('last_activity')->index(); // آخر نشاط
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('users');

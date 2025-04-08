@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Web;
 
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Role;
@@ -12,46 +13,114 @@ use Artisan;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Purchase;
 
 class UsersController extends Controller {
 
 	use ValidatesRequests;
 
-    public function list(Request $request) {
-        if(!auth()->user()->hasPermissionTo('show_users'))abort(401);
-        $query = User::select('*');
-        $query->when($request->keywords, 
-        fn($q)=> $q->where("name", "like", "%$request->keywords%"));
-        $users = $query->get();
-        return view('users.list', compact('users'));
+    public function purchases()
+    {
+        $user = auth()->user();
+        $purchases = Purchase::where('user_id', $user->id)->with('product')->get();
+
+        return view('products.bought_products_list', compact('purchases'));
     }
 
+    public function insufficientCredit()
+    {
+        return view('users.insufficient-credit');
+    }
+
+    public function updateCredit(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|exists:users,id',
+            'credit' => 'required|numeric|min:0',
+        ]);
+
+        $user = User::find($request->id);
+        $user->credit = $request->credit;
+        $user->save();
+
+        return back()->with('success', 'Credit updated successfully!');
+    }
+
+    public function create()
+    {
+
+        return view('users.create');
+    }
+    public function store(Request $request)
+    {
+        $request->validate([
+            'name' => 'required',
+            'email' => 'required|email|unique:users',
+            'password' => 'required',
+        ], [
+            'email.unique' => 'The email has already been taken.',
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => bcrypt($request->password),
+        ]);
+        $user->assignRole("Employee");
+
+        return redirect()->route('users')->with('success', 'User created successfully!');
+    }
+
+    
+
+    public function list(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->hasPermissionTo('show_users')) {
+            abort(401);
+        }
+    
+        $query = User::query();
+    
+        if (auth()->user()->hasRole('Employee')) {
+            $query->whereHas('roles', function ($q) {
+                $q->where('name', 'Customer');
+            });
+        }
+        $query->whereDoesntHave('roles', function ($q) {
+            $q->where('name', 'Admin');
+        });
+    
+        $query->when(
+            $request->keywords,
+            fn($q) => $q->where("name", "like", "%$request->keywords%")
+        );
+    
+        $users = $query->get(); // غيرت $user لـ $users عشان يتطابق مع القالب
+        return view('users.list', compact('users')); // عدلت الـ view لـ users.list
+    }
 	public function register(Request $request) {
         return view('users.register');
     }
 
-    public function doRegister(Request $request) {
+    public function doRegister(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'min:5'],
+            'email' => ['required', 'email', 'unique:users'],
+            'password' => ['required', 'string', 'min:8'],
+        ]);
 
-    	try {
-    		$this->validate($request, [
-	        'name' => ['required', 'string', 'min:5'],
-	        'email' => ['required', 'email', 'unique:users'],
-	        'password' => ['required', 'confirmed', Password::min(8)->numbers()->letters()->mixedCase()->symbols()],
-	    	]);
-    	}
-    	catch(\Exception $e) {
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+        $user->assignRole('Customer');
 
-    		return redirect()->back()->withInput($request->input())->withErrors('Invalid registration information.');
-    	}
+        Auth::login($user);
 
-    	
-    	$user =  new User();
-	    $user->name = $request->name;
-	    $user->email = $request->email;
-	    $user->password = bcrypt($request->password); //Secure
-	    $user->save();
-
-        return redirect('/');
+        return redirect('/')->with('success', 'Registration successful!');
     }
 
     public function login(Request $request) {
@@ -185,4 +254,6 @@ class UsersController extends Controller {
 
         return redirect(route('profile', ['user'=>$user->id]));
     }
+
+    
 } 

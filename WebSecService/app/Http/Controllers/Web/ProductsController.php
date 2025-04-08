@@ -7,6 +7,7 @@ use DB;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\Purchase;
 
 class ProductsController extends Controller {
 
@@ -15,6 +16,41 @@ class ProductsController extends Controller {
 	public function __construct()
     {
         $this->middleware('auth:web')->except('list');
+    }
+
+	public function boughtProducts(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+        ]);
+
+        $product = Product::find($request->product_id);
+        $user = auth()->user();
+
+        if ($user->credit < $product->price) {
+            return redirect()->route('insufficient.credit');
+        }
+
+        $user->credit -= $product->price;
+        $user->save();
+
+        $product->stock -= 1;
+        $product->save();
+
+        Purchase::create([
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'quantity' => 1,
+            'total_price' => $product->price,
+            'purchased_at' => now(),
+        ]);
+
+        return redirect()->route('purchases')->with('success', 'Product added to bought products list!');
+    }
+
+	public function show()
+    {
+        return view('products.insufficient_credit');
     }
 
 	public function list(Request $request) {
@@ -72,4 +108,5 @@ class ProductsController extends Controller {
 
 		return redirect()->route('products_list');
 	}
+	
 } 
